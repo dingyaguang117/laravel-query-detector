@@ -37,7 +37,7 @@ class QueryDetector
         }
 
         DB::listen(function ($query) {
-            $backtrace = collect(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 50));
+            $backtrace = collect(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, config('querydetector.backtrace_limit', 50)));
 
             $this->logQuery($query, $backtrace);
         });
