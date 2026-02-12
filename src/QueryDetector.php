@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use BeyondCode\QueryDetector\Attributes\SuppressQueryDetection;
 use BeyondCode\QueryDetector\Events\QueryDetected;
 
 class QueryDetector
@@ -18,6 +19,9 @@ class QueryDetector
      * @var bool
      */
     private $booted = false;
+
+    /** @var array<string, bool> */
+    private $suppressAttributeCache = [];
 
     private function resetQueries()
     {
@@ -37,7 +41,7 @@ class QueryDetector
         }
 
         DB::listen(function ($query) {
-            $backtrace = collect(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 50));
+            $backtrace = collect(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, config('querydetector.backtrace_limit', 50)));
 
             $this->logQuery($query, $backtrace);
         });
@@ -79,6 +83,11 @@ class QueryDetector
 
             // We try to access a relation
             if (is_array($relation) && isset($relation['object'])) {
+                foreach ($backtrace as $trace) {
+                    if ($this->hasSuppressAttribute($trace)) {
+                        return;
+                    }
+                }
                 if ($relation['class'] === Relation::class) {
                     $model = get_class($relation['object']->getParent());
                     $relationName = get_class($relation['object']->getRelated());
@@ -111,6 +120,32 @@ class QueryDetector
                 ];
             }
         }
+    }
+
+    private function hasSuppressAttribute(array $trace): bool
+    {
+        if (PHP_VERSION_ID < 80000) {
+            return false;
+        }
+
+        if (!isset($trace['class'], $trace['function'])) {
+            return false;
+        }
+
+        $key = $trace['class'] . '::' . $trace['function'];
+
+        if (!array_key_exists($key, $this->suppressAttributeCache)) {
+            try {
+                $ref = new \ReflectionMethod($trace['class'], $trace['function']);
+                $this->suppressAttributeCache[$key] = !empty(
+                    $ref->getAttributes(SuppressQueryDetection::class)
+                );
+            } catch (\ReflectionException) {
+                $this->suppressAttributeCache[$key] = false;
+            }
+        }
+
+        return $this->suppressAttributeCache[$key];
     }
 
     protected function findSource($stack)

@@ -89,4 +89,32 @@ If you use **Lumen**, you need to copy the config file manually and register the
 $app->register(\BeyondCode\QueryDetector\LumenQueryDetectorServiceProvider::class);
 ```
 
+## Suppressing Detection with Attributes (PHP 8+)
+
+If you want to suppress N+1 detection for a specific method, you can use the `#[SuppressQueryDetection]` attribute. All database queries triggered inside the annotated method (including nested calls) will be ignored by the detector.
+
+```php
+use BeyondCode\QueryDetector\Attributes\SuppressQueryDetection;
+
+class DashboardController extends Controller
+{
+    #[SuppressQueryDetection]
+    public function index()
+    {
+        // N+1 queries in this method will not be reported
+        $authors = Author::all();
+
+        foreach ($authors as $author) {
+            $author->posts;
+        }
+    }
+}
+```
+
+This is useful when you intentionally accept N+1 queries in certain contexts (e.g. admin pages with small datasets, or background jobs where eager loading is impractical).
+
+> **Note:** This feature requires PHP 8.0 or higher. On PHP 7.x, the attribute is silently ignored.
+
+## Events
+
 If you need additional logic to run when the package detects unoptimized queries, you can listen to the `\BeyondCode\QueryDetector\Events\QueryDetected` event and write a listener to run your own handler. (e.g. send warning to Sentry/Bugsnag, send Slack notification, etc.)
