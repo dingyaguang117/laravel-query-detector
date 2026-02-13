@@ -89,4 +89,31 @@ If you use **Lumen**, you need to copy the config file manually and register the
 $app->register(\BeyondCode\QueryDetector\LumenQueryDetectorServiceProvider::class);
 ```
 
+## Suppressing Detection
+
+You can temporarily disable N+1 detection for a specific block of code using `withoutDetection()`. All queries inside the closure will be ignored by the detector.
+
+```php
+app(\BeyondCode\QueryDetector\QueryDetector::class)->withoutDetection(function () {
+    // N+1 queries here will not be reported
+    $authors = Author::all();
+
+    foreach ($authors as $author) {
+        $author->posts;
+    }
+});
+```
+
+The closure's return value is passed through, so you can use it inline:
+
+```php
+$authors = app(\BeyondCode\QueryDetector\QueryDetector::class)->withoutDetection(function () {
+    return Author::all()->each(fn ($author) => $author->posts);
+});
+```
+
+This is useful when you intentionally accept N+1 queries in certain contexts (e.g. admin pages with small datasets, or background jobs where eager loading is impractical). Detection resumes automatically after the closure finishes, even if it throws an exception.
+
+## Events
+
 If you need additional logic to run when the package detects unoptimized queries, you can listen to the `\BeyondCode\QueryDetector\Events\QueryDetected` event and write a listener to run your own handler. (e.g. send warning to Sentry/Bugsnag, send Slack notification, etc.)
